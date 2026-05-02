@@ -199,9 +199,35 @@ def build_llm_prompt(metadata: Dict[str, Any], bounding_boxes: List[Dict[str, An
     prompt += f"\nVisual comparison notes:\n{visual_notes}\n\n"
     prompt += (
         "Respond with JSON containing: executive_summary, changes, construction_impact, "
-        "recommended_site_team_checks, assumptions_and_limitations."
+        "recommended_site_team_checks, assumptions_and_limitations. "
+        "Return only valid JSON. Do not wrap it in Markdown or include explanatory text."
     )
     return prompt
+
+
+def parse_llm_json(content: str) -> Dict[str, Any]:
+    cleaned = content.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        end = cleaned.rfind("}")
+        if start == -1 or end == -1 or start >= end:
+            raise
+        parsed = json.loads(cleaned[start : end + 1])
+
+    if not isinstance(parsed, dict):
+        raise json.JSONDecodeError("LLM output JSON must be an object.", cleaned, 0)
+
+    return parsed
 
 
 def send_changes_to_llm(metadata: Dict[str, Any], bounding_boxes: List[Dict[str, Any]], visual_notes: str) -> Dict[str, Any]:
@@ -215,16 +241,16 @@ def send_changes_to_llm(metadata: Dict[str, Any], bounding_boxes: List[Dict[str,
     response = openai.ChatCompletion.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": "You are a helpful assistant. Return only valid JSON."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
         max_tokens=600,
     )
 
-    content = response.choices[0].message.content
+    content = response.choices[0].message.content or ""
     try:
-        report = json.loads(content)
+        report = parse_llm_json(content)
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Failed to parse LLM output as JSON.")
 
