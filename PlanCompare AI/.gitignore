@@ -6,6 +6,8 @@ frontend/.next
 backend/.venv
 backend/.python-packages/
 backend/.python-packages314/
+backend/uploads/
+backend/processed/
 __pycache__/
 *.py[cod]
 *.pyo
