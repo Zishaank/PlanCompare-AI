@@ -9,7 +9,7 @@ import numpy as np
 import openai
 import pytesseract
 from PIL import Image
-from pytesseract import Output
+from pytesseract import Output, TesseractNotFoundError
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -150,7 +150,10 @@ def ocr_text_for_box(image_path: Path, bbox: dict, padding: int = 20) -> dict:
 
     crop_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
     pil_crop = Image.fromarray(crop_rgb)
-    ocr_data = pytesseract.image_to_data(pil_crop, output_type=Output.DICT)
+    try:
+        ocr_data = pytesseract.image_to_data(pil_crop, output_type=Output.DICT)
+    except TesseractNotFoundError:
+        return {"text": "Requires manual review", "confidence": 0.0}
 
     words = []
     confidences = []
