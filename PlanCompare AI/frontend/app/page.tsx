@@ -4,17 +4,39 @@ import { FormEvent, useState } from 'react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 
+type ComparisonResponse = {
+  message?: string;
+  llm_report?: unknown;
+  bounding_boxes?: unknown[];
+  files?: Record<string, string>;
+};
+
+function formatComparisonOutput(data: ComparisonResponse) {
+  return JSON.stringify(
+    {
+      report: data.llm_report ?? 'No report returned.',
+      changed_regions: data.bounding_boxes?.length ?? 0,
+      files: data.files ?? {},
+      message: data.message ?? '',
+    },
+    null,
+    2,
+  );
+}
+
 export default function HomePage() {
   const [previousDrawing, setPreviousDrawing] = useState<File | null>(null);
   const [revisedDrawing, setRevisedDrawing] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [detailedResult, setDetailedResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setDetailedResult(null);
 
     if (!previousDrawing || !revisedDrawing) {
       setError('Please upload both PDF drawings before comparing.');
@@ -37,8 +59,9 @@ export default function HomePage() {
         throw new Error(data?.detail || 'Comparison failed.');
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as ComparisonResponse;
       setResult(data.message || 'Comparison completed successfully.');
+      setDetailedResult(formatComparisonOutput(data));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unexpected error.');
     } finally {
@@ -88,6 +111,15 @@ export default function HomePage() {
 
           {error && <div className="message error">{error}</div>}
           {result && <div className="message success">{result}</div>}
+          {detailedResult && (
+            <section className="result-box" aria-label="Detailed comparison output">
+              <div className="result-header">
+                <h2>Detailed output</h2>
+                <span>Generated report</span>
+              </div>
+              <textarea value={detailedResult} readOnly />
+            </section>
+          )}
         </form>
       </section>
     </main>
