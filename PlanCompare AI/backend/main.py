@@ -200,6 +200,7 @@ def build_llm_prompt(metadata: Dict[str, Any], bounding_boxes: List[Dict[str, An
     prompt += (
         "Respond with JSON containing: executive_summary, changes, construction_impact, "
         "recommended_site_team_checks, assumptions_and_limitations. "
+        "Group related bounding boxes into concise change items instead of listing every box separately. "
         "Return only valid JSON. Do not wrap it in Markdown or include explanatory text."
     )
     return prompt
@@ -245,10 +246,16 @@ def send_changes_to_llm(metadata: Dict[str, Any], bounding_boxes: List[Dict[str,
             {"role": "user", "content": prompt},
         ],
         temperature=0.2,
-        max_tokens=600,
+        max_tokens=2000,
+        response_format={"type": "json_object"},
     )
 
-    content = response.choices[0].message.content or ""
+    choice = response.choices[0]
+    finish_reason = getattr(choice, "finish_reason", None)
+    if finish_reason == "length":
+        raise HTTPException(status_code=500, detail="LLM response was truncated before valid JSON could be returned.")
+
+    content = choice.message.content or ""
     try:
         report = parse_llm_json(content)
     except json.JSONDecodeError:
